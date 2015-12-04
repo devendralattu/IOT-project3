@@ -1,0 +1,17 @@
+file3 = "GatewayOutputFile.txt";
+	
+file1 = "DoorConfigurationFile.txt";
+file2 = "DoorStateFile.txt";
+file3 = "DoorOutputFile.txt";
+
+file1 = "KeychainConfigurationFile.txt";
+file2 = "KeychainStateFile.txt";
+file3 = "KeychainOutputFile.txt";
+
+file1 = "MotionSensorConfigurationFile.txt";
+file2 = "MotionSensorStateFile.txt";
+file3 = "MotionSensorOutputFile.txt";
+
+file1 = "SecurityConfigurationFile.txt";
+
+Test
