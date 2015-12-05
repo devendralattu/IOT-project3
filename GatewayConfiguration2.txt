@@ -1,0 +1,4 @@
+Backend:127.0.0.1:8071
+CurrentGateway:127.0.0.1:8091
+PrimaryGateway:127.0.0.1:8080
+

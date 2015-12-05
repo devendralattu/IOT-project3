@@ -205,19 +205,6 @@ int main(int argc, char* argv[])
 			if(getline(&state, &len, fp2) < 0)
 			{
 				break;
-				/*
-				rewind(fp2);
-				
-				i = 0;
-				getline(&state, &len, fp2);
-	
-				temp = strtok(state,";");
-				nextTime = atoi(temp);
-				value = strtok(NULL,";");
-				sprintf(valueNew, "%s", value);
-				valueNew[strlen(valueNew) - 1] = '\0';
-				continue;
-				*/
 			}
 				
 			temp = strtok(state,";");
