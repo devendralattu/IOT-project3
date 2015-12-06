@@ -46,11 +46,11 @@ int main(int argc, char* argv[])
 	file1 = argv[1];
 	file2 = argv[2];
 	file3 = argv[3];
-/*	
-	file1 = "KeychainConfigurationFile.txt";
-	file2 = "KeychainStateFile.txt";
-	file3 = "KeychainOutputFile.txt";
-*/			
+/****	
+	file1 = "KeychainConfiguration.txt";
+	file2 = "output/KeychainInput.txt";
+	file3 = "output/KeychainOutput.log";
+/****/			
 	int sockfd;
 	struct sockaddr_in server;
 	char readmsg[2000], msglen;
@@ -117,35 +117,42 @@ int main(int argc, char* argv[])
 	msglen = recv(sockfd, readmsg, 200, 0);
 	readmsg[msglen] = '\0';
 	puts(readmsg);
-	while(strcmp(readmsg, "registered") < 0)
+	while(strstr(readmsg, "registered") != NULL)
 	{
+		sleep(1);
 		puts("Gateway asked to proceed");
 		break;	
 	}
 	
 	//Read IP Address and port of other sensors
 	line = strtok(readmsg, ":");
+	printf("line >> %s\n", line);
 	i = 3;
 	while(i--)
 	{
 		line = strtok(NULL, ":");
-		if(strcmp(line, "door") == 0)
+	
+		if((line != NULL))// && (line[0] == '\0'))
 		{
-			doorIP = strtok(NULL, ":");
-			line = strtok(NULL, ":");
-			doorPort = atoi(line);
-		}
-		else if(strcmp(line, "motionsensor") == 0)
-		{
-			motionIP = strtok(NULL, ":");
-			line = strtok(NULL, ":");
-			motionPort = atoi(line);
-		}		
-		else if(strcmp(line, "keychain") == 0)
-		{
-			line = strtok(NULL, ":");
-			line = strtok(NULL, ":");
-		}
+			printf("line >> %s\n", line);
+			if(strcmp(line, "door") == 0)
+			{
+				doorIP = strtok(NULL, ":");
+				line = strtok(NULL, ":");
+				doorPort = atoi(line);
+			}
+			else if(strcmp(line, "motionsensor") == 0)
+			{
+				motionIP = strtok(NULL, ":");
+				line = strtok(NULL, ":");
+				motionPort = atoi(line);
+			}		
+			else if(strcmp(line, "keychain") == 0)
+			{
+				line = strtok(NULL, ":");
+				line = strtok(NULL, ":");
+			}
+		}	
 	}
 	
 	sleep(1);
@@ -369,45 +376,59 @@ void * connection_handler_2(void * cs2)
 
 void * keychainConnectMotionThread(void * args)
 {
-	//create MOTION socket
-	if((sockfdMotion = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	if(motionPort > 0)
 	{
-		printf("\nCould not create sockfdMotion Sensor socket");
-	}
+		//create MOTION socket
+		if((sockfdMotion = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+		{
+			printf("\nCould not create sockfdMotion Sensor socket");
+		}
 
-	//Initialise the backend socket
-	motion.sin_family = AF_INET;
-	motion.sin_addr.s_addr = inet_addr(motionIP);
-	motion.sin_port = htons(motionPort);
+		//Initialise the backend socket
+		motion.sin_family = AF_INET;
+		motion.sin_addr.s_addr = inet_addr(motionIP);
+		motion.sin_port = htons(motionPort);
 
-	//Connect to gateway
-	if((connect(sockfdMotion, (struct sockaddr *) &motion, sizeof(motion))) < 0)
-	{
-		perror("\nUnable to connect to motion");
-	}
+		//Connect to gateway
+		if((connect(sockfdMotion, (struct sockaddr *) &motion, sizeof(motion))) < 0)
+		{
+			perror("\nUnable to connect to motion");
+		}
 	
-	puts("keychain: Connected to motion");		
+		puts("keychain: Connected to motion");		
+	}
+	else
+	{
+		perror("motion port not fetched for establishing connection");
+	}	
 }
 
 void * keychainConnectDoorThread(void * args)
 {
-	//create DOOR socket
-	if((sockfdDoor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	if(doorPort > 0)
 	{
-		printf("\nCould not create sockfdDoor Sensor socket");
-	}
+		//create DOOR socket
+		if((sockfdDoor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+		{
+			printf("\nCould not create sockfdDoor Sensor socket");
+		}
 
-	//Initialise the backend socket
-	door.sin_family = AF_INET;
-	door.sin_addr.s_addr = inet_addr(doorIP);
-	door.sin_port = htons(doorPort);
+		//Initialise the backend socket
+		door.sin_family = AF_INET;
+		door.sin_addr.s_addr = inet_addr(doorIP);
+		door.sin_port = htons(doorPort);
 
-	//Connect to gateway
-	if((connect(sockfdDoor, (struct sockaddr *) &door, sizeof(door))) < 0)
-	{
-		perror("\nUnable to connect to door");
-	}
+		//Connect to gateway
+		if((connect(sockfdDoor, (struct sockaddr *) &door, sizeof(door))) < 0)
+		{
+			perror("\nUnable to connect to door");
+		}
 	
-	puts("keychain: Connected to door");		
+		puts("keychain: Connected to door");		
+	}
+	else
+	{
+		perror("Door port not fetched for establishing connection");
+	}	
 }	
 

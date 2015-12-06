@@ -47,11 +47,11 @@ int main(int argc, char* argv[])
 	file2 = argv[2];
 	file3 = argv[3];
 	
-	/***** 
+	/*****
 	file1 = "DoorConfiguration.txt";
-	file2 = "DoorInput.txt";
-	file3 = "DoorOutput.log";
-	*****/
+	file2 = "output/DoorInput.txt";
+	file3 = "output/DoorOutput.log";
+	/*****/
 	
 	int sockfd;
 	struct sockaddr_in server;
@@ -119,35 +119,42 @@ int main(int argc, char* argv[])
 	msglen = recv(sockfd, readmsg, 200, 0);
 	readmsg[msglen] = '\0';
 	puts(readmsg);
-	while(strcmp(readmsg, "registered") < 0)
+	while(strstr(readmsg, "registered") != NULL)
 	{
+		sleep(1);
 		puts("Gateway asked to proceed");
 		break;	
 	}
 	
 	//Read IP Address and port of other sensors
 	line = strtok(readmsg, ":");
+	printf("line >> %s\n", line);
 	i = 3;
 	while(i--)
 	{
 		line = strtok(NULL, ":");
-		if(strcmp(line, "keychain") == 0)
+
+		if((line != NULL))// && (line[0] == '\0'))
 		{
-			keyIP = strtok(NULL, ":");
-			line = strtok(NULL, ":");
-			keyPort = atoi(line);
-		}
-		else if(strcmp(line, "motionsensor") == 0)
-		{
-			motionIP = strtok(NULL, ":");
-			line = strtok(NULL, ":");	
-			motionPort = atoi(line);
-		}		
-		else if(strcmp(line, "door") == 0)
-		{
-			line = strtok(NULL, ":");
-			line = strtok(NULL, ":");
-		}
+			printf("line >> %s\n", line);
+			if(strcmp(line, "keychain") == 0)
+			{
+				keyIP = strtok(NULL, ":");
+				line = strtok(NULL, ":");
+				keyPort = atoi(line);
+			}
+			else if(strcmp(line, "motionsensor") == 0)
+			{
+				motionIP = strtok(NULL, ":");
+				line = strtok(NULL, ":");	
+				motionPort = atoi(line);
+			}		
+			else if(strcmp(line, "door") == 0)
+			{
+				line = strtok(NULL, ":");
+				line = strtok(NULL, ":");
+			}
+		}	
 	}
 	
 	sleep(1);	
@@ -351,45 +358,59 @@ void * connection_handler_2(void * cs2)
 
 void * doorConnectMotionThread(void * args)
 {
-	//create MOTION socket
-	if((sockfdMotion = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	if(motionPort > 0)
 	{
-		printf("\nCould not create sockfdMotion Sensor socket");
-	}
+		//create MOTION socket
+		if((sockfdMotion = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+		{
+			printf("\nCould not create sockfdMotion Sensor socket");
+		}
 
-	//Initialise the backend socket
-	motion.sin_family = AF_INET;
-	motion.sin_addr.s_addr = inet_addr(motionIP);
-	motion.sin_port = htons(motionPort);
+		//Initialise the backend socket
+		motion.sin_family = AF_INET;
+		motion.sin_addr.s_addr = inet_addr(motionIP);
+		motion.sin_port = htons(motionPort);
 
-	//Connect to gateway
-	if((connect(sockfdMotion, (struct sockaddr *) &motion, sizeof(motion))) < 0)
-	{
-		perror("\nUnable to connect to motion");
-	}
+		//Connect to gateway
+		if((connect(sockfdMotion, (struct sockaddr *) &motion, sizeof(motion))) < 0)
+		{
+			perror("\nUnable to connect to motion");
+		}
 	
-	puts("door: Connected to motion");	
+		puts("door: Connected to motion");	
+	}
+	else
+	{
+		perror("motion port not fetched for establishing connection");
+	}	
 }
 
 void * doorConnectKeychainThread(void * args)
 {	
-	//create KEYCHAIN socket
-	if((sockfdKeychain = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	if(keyPort > 0)
 	{
-		printf("\nCould not create sockfdKeychain Sensor socket");
-	}
+		//create KEYCHAIN socket
+		if((sockfdKeychain = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+		{
+			printf("\nCould not create sockfdKeychain Sensor socket");
+		}
 
-	//Initialise the backend socket
-	keychain.sin_family = AF_INET;
-	keychain.sin_addr.s_addr = inet_addr(keyIP);
-	keychain.sin_port = htons(keyPort);
+		//Initialise the backend socket
+		keychain.sin_family = AF_INET;
+		keychain.sin_addr.s_addr = inet_addr(keyIP);
+		keychain.sin_port = htons(keyPort);
 
-	//Connect to gateway
-	if((connect(sockfdKeychain, (struct sockaddr *) &keychain, sizeof(keychain))) < 0)
-	{
-		perror("\nUnable to connect to keychain");
-	}
+		//Connect to gateway
+		if((connect(sockfdKeychain, (struct sockaddr *) &keychain, sizeof(keychain))) < 0)
+		{
+			perror("\nUnable to connect to keychain");
+		}
 	
-	puts("door: Connected to keychain");
+		puts("door: Connected to keychain");
+	}
+	else
+	{
+		perror("key port not fetched for establishing connection");
+	}	
 }
 

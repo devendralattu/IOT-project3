@@ -1,0 +1,6 @@
+registered:keychain:127.0.0.1:8083:motionsensor:127.0.0.1:8082:door:127.0.0.1:8084Message received from door = 1449433058;Open;0;0;1
+Message received from door = 1449433068;Close;2;2;2
+Message received from door = 1449433078;Open;4;4;3
+Message received from door = 1449433088;Close;6;6;4
+Message received from door = 1449433093;Open;7;7;5
+Message received from door = 1449433095;Close;8;8;6

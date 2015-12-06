@@ -6,8 +6,12 @@
 #include <pthread.h>
 #include <string.h>
 
+#define heartBeat     ((const unsigned char *)"Alive")
+
 void * connection_handler(void *);
 void * threadReadFun(void *);
+void * sendingGatewayThread();
+void * readRegistrationInfo();
 
 typedef struct
 {
@@ -39,16 +43,19 @@ int prevState[4] = {0};
 int id = -1;
 int reg = -1;
 char registerIds[300];
+char registrationInfo[2000];
 int setReg = 1;
+int setReg2 = 0;
+int regAtSecGateway = 0;
 
-int backsockfd, securitySockId;
+int backsockfd, securitySockId, pGatewaysockfd, primary, oGatewaysockfd;
 int vectorClock[4] = {0};
 FILE *fpOutputFile;
 char *file1, *file3;	
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutexInner = PTHREAD_MUTEX_INITIALIZER;
 
+int startHeartBeatMsg = 0;
 //-----------------------------------------
 void writeToFile(char * fileData)
 {
@@ -57,6 +64,14 @@ void writeToFile(char * fileData)
 	fclose(fpOutputFile);
 }
 
+void writeToGateway(char *fileMsg)
+{
+	if(primary)
+		write(oGatewaysockfd, fileMsg, strlen(fileMsg));
+	else
+		write(pGatewaysockfd, fileMsg, strlen(fileMsg));
+	printf("\nWriting to other gateway\n");	
+}
 //Check if user or thief has entered or left
 void checkUser()
 {
@@ -81,6 +96,7 @@ void checkUser()
 	    sprintf(fileMsg,"%d.) Security System is OFF\n", msg);
 		write(backsockfd, fileMsg, strlen(fileMsg));
 		write(securitySockId, fileMsg, strlen(fileMsg));
+		writeToGateway(fileMsg);
 	} 
 }
 
@@ -107,9 +123,9 @@ int main(int argc, char *argv[])
 	file1 = argv[1];
 	file3 = argv[2];
 	
-	/****/ 
+	/*****/
 	file1 = "GatewayConfiguration1.txt";
-	file3 = "GatewayOutput.log";
+	file3 = "output/GatewayOutput1.log";
 	/*****/
 	
 	int sockfd,clientsockfd;
@@ -144,8 +160,8 @@ int main(int argc, char *argv[])
     
     //2nd line
     getline(&configInfoSplit, &len, fp1);
-    gatewayName = strtok(configInfoSplit, ":");
     strcpy(configInfo, configInfoSplit);
+    gatewayName = strtok(configInfoSplit, ":");
     gatewayIP = strtok(NULL, ":");
     gatewayPort = atoi(strtok(NULL, "\n"));
     
@@ -163,6 +179,42 @@ int main(int argc, char *argv[])
     {
     	// this is primary gateway;
     	printf("\nI am primary Gateway\n");
+    	primary = 1;
+    }
+    else
+    {
+		//connect another gateway	
+		struct sockaddr_in pGateway;
+		//create the socket
+		if((pGatewaysockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+		{
+			printf("\nCould not create other Gateway socket.. Please run primary Gateway first\n");
+		}
+
+		//Initialise the pGateway socket
+		pGateway.sin_family = AF_INET;
+		pGateway.sin_addr.s_addr = inet_addr(pGatewayIP);
+		pGateway.sin_port = htons( pGatewayPort );
+
+		runagain:
+		//Connect gateway to pGatewaysockfd
+		if((connect(pGatewaysockfd, (struct sockaddr *) &pGateway, sizeof(pGateway))) < 0)
+		{
+			perror("\nUnable to connect Gateway to other Gateway..Waiting for connection from primary Gateway..Trying again..\n");
+			sleep(2);
+			goto runagain;			
+			//return;
+		}
+	
+		puts("gateway: Connected to other Gateway");
+	
+		write(pGatewaysockfd, configInfo, strlen(configInfo), 0);
+		puts(configInfo);
+		
+		//sleep(2);
+		//create a new thread for sending messages
+		//pthread_create(&thread1, NULL, &sendingGatewayThread, NULL);
+		pthread_create(&thread1, NULL, &readRegistrationInfo, NULL);
     }
     
 	int c;
@@ -216,7 +268,7 @@ int main(int argc, char *argv[])
 	
 	puts("gateway: Connected to backend");
 	//-------------------------------------------------------------------------------------------------------
-		
+	
 	//Initialize starting values: Assuming user is at home
     currState[0] = 1; //keychain true
     currState[1] = 0; //motion false
@@ -289,57 +341,127 @@ void * connection_handler(void * cs1)
 	strcat(writemsg, csArr[itemId].ip);
 	strcat(writemsg, " Registration complete.\nWaiting for other devices to connect before we can start\n"); 
 	
+	//store oGatewaysockfd value
+	if(strstr(csArr[itemId].name, "ateway") != NULL)
+	{
+		oGatewaysockfd = csArr[itemId].sock;
+		printf("\ncsArr[itemId].name, \"ateway\" >>> oGatewaysockfd = %d\n", oGatewaysockfd);
+	}
 	sleep(1);
 	
 	puts(writemsg);
 	write(csArr[itemId].sock, writemsg, strlen(writemsg));
 	memset(readmsg, 0, 2000);
 	
+	//check if message is received from 3 sensors or security device.
 	if((strstr(csArr[itemId].name, "door") != NULL) || (strstr(csArr[itemId].name, "motion") != NULL) || (strstr(csArr[itemId].name, "keychain") != NULL) || (strstr(csArr[itemId].name, "security") != NULL))
 	{
 		reg++;
-	}
-	
-	if(strstr(csArr[itemId].name, "security") != NULL)
-	{
-		securitySockId = csArr[itemId].sock;
-	}
-	//if received from all sensors, order all sensors to proceed
-	//some code and logic here
-	while(1)
-	{
-		if(id >= 3 && reg >= 3)
-			break;
-	}	
-	
-	// Generate only one common register message and pass to all sensors
-	int i, port;
-	char portStr[10];	
-	if(setReg == 1)
-	{
-		setReg = 0;
-		for(i=0;i<4;i++)
+		
+		if(strstr(csArr[itemId].name, "security") != NULL)
 		{
-			if(strstr(csArr[i].name, "security") == NULL) 
-			{
-				port = csArr[i].port;
-				sprintf(portStr, "%d", port);
-			
-				strcat(registerIds, ":");
-				strcat(registerIds, csArr[i].name);
-				strcat(registerIds, ":");
-				strcat(registerIds, csArr[i].ip);
-				strcat(registerIds, ":");
-				strcat(registerIds, portStr);
-			}	
+			securitySockId = csArr[itemId].sock;
 		}
-	printf("\nmessage to pass to sensors = '''\n%s\n'''\n",registerIds);
-	}		
+		//if received from all sensors, order all sensors to proceed
+		//some code and logic here
+		while(1)
+		{
+			if(primary)
+			{
+				if(id >= 2 && reg >= 2)
+				{
+					break;		
+				}	
+			}
+			else
+			{			
+				if(id >= 1 && reg >= 1)
+				{
+					break;		
+				}
+			}
+			sleep(1);
+		}	
 	
-	// Acknowledge sensors that everyone has been registered and they should now proceed.
-	write(csArr[itemId].sock, registerIds, strlen(registerIds));
-	pthread_create(&thread1, NULL, &threadReadFun, (void *)&csArr[itemId]);
-																																																																																									
+		// Generate only one common register message and pass to all sensors
+		int i, port;
+		char portStr[10];	
+		if(setReg == 1)
+		{
+			setReg = 0;
+			for(i=0; i < (2+primary); i++)
+			{
+				if((strstr(csArr[i].name, "security") == NULL) && (strstr(csArr[i].name, "atewa") == NULL))
+				{
+					port = csArr[i].port;
+					sprintf(portStr, "%d", port);
+			
+					strcat(registerIds, ":");
+					strcat(registerIds, csArr[i].name);
+					strcat(registerIds, ":");
+					strcat(registerIds, csArr[i].ip);
+					strcat(registerIds, ":");
+					strcat(registerIds, portStr);
+				}
+			}
+			printf("\nmessage to pass to P/S Gateway = '''\n%s\n'''\n",registerIds);
+			if(primary)
+			{
+				write(oGatewaysockfd, registerIds, strlen(registerIds));
+				while(msglen = recv(oGatewaysockfd, registrationInfo, 2000, 0) <= 0)
+				{
+					continue;
+				}
+				printf("\nInside if part >> registrationInfo = %s\n", registrationInfo);
+				setReg2 = 1;
+			}
+			else
+			{
+				//wait till we receive and process registerIds from primary gateway and send other gateway's reg info back to it.
+				//while(!((registrationInfo != NULL) && (registrationInfo[0] == '\0')))
+				//while(registrationInfo == NULL)
+				while(regAtSecGateway == 0)
+				{
+					continue;
+				}
+				printf("\nInside else part >> registrationInfo = %s\n", registrationInfo);
+				setReg2 = 1;
+			}		
+		}		
+		
+		while(setReg2 == 0)
+		{
+			sleep(0.5);
+			continue;
+		}
+		// Acknowledge sensors that everyone has been registered and they should now proceed.
+		if(setReg2)
+		{
+			puts("Inside setReg2");
+			
+			write(csArr[itemId].sock, registrationInfo, strlen(registrationInfo));	
+
+			pthread_create(&thread1, NULL, &threadReadFun, (void *)&csArr[itemId]);
+		}	
+	}
+	else if(strstr(csArr[itemId].name, "ateway") != NULL)
+	{
+		reg++;
+		if(startHeartBeatMsg)
+		{
+			char readmsgGateway[2000];
+			printf("\nMessage received from Gateway\n");
+		
+			while(msglen = recv(oGatewaysockfd, readmsgGateway, 2000, 0) > 0 )
+			{
+				printf("Message received = %s\n", readmsgGateway);
+				writeToFile(readmsgGateway);
+			
+				write(oGatewaysockfd, heartBeat, strlen(heartBeat));
+				memset(readmsg, 0, sizeof(readmsgGateway));
+			}
+		}	
+	}																																																			
 }
 
 void* threadReadFun(void *cs1)
@@ -425,7 +547,9 @@ void* threadReadFun(void *cs1)
         }  
 		
 		sprintf(sendmsg, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, readBackmsg);
-		write(backsockfd, sendmsg, strlen(sendmsg));				
+		write(backsockfd, sendmsg, strlen(sendmsg));	
+		writeToGateway(sendmsg);
+					
 		pthread_mutex_unlock(&mutex);		
 		printf("Message sent to backend = %s\n",sendmsg);
 		
@@ -443,4 +567,63 @@ void* threadReadFun(void *cs1)
 	{
 		perror("\nDisconnected "); 
 	}
+}
+
+
+void* sendingGatewayThread()
+{
+	int msglen;
+	char readmsg[2000];
+	printf("\n pGatewaysockfd = %d\n", pGatewaysockfd);
+	printf("inside while of sendingGatewayThread\n");
+	while(1)
+	{
+		puts(heartBeat);
+		write(pGatewaysockfd, heartBeat, strlen(heartBeat), 0);
+
+		memset(readmsg, 0, sizeof readmsg);
+		while(msglen = recv(pGatewaysockfd, readmsg, 2000, 0) <= 0)
+		{
+			continue;
+		}
+		printf("\nMessage received = %s\n", readmsg);
+		writeToFile(readmsg);
+		sleep(5);
+	}	
+}
+
+void * readRegistrationInfo()
+{
+	int msglen;
+	char readmsg[2000];
+	char * line;
+	
+	gotoLoop:
+	while(msglen = recv(pGatewaysockfd, readmsg, 2000, 0) <= 0)
+	{
+		continue;
+	}
+	
+	printf("\nMessage received >>> %s\n", readmsg);
+	
+	if(strstr(readmsg, "register:") == NULL)
+	{
+		memset(readmsg, 0, sizeof readmsg);
+		goto gotoLoop;
+	}
+	
+	strcpy(registrationInfo, readmsg);
+	memset(readmsg, 0, sizeof readmsg);
+	
+	line = strtok(registerIds, ":"); // removed 'registered'
+	
+	printf("\nline === %s && registerIds === %s\n", line, registerIds);
+	
+	strcat(registrationInfo, ":");
+	strcat(registrationInfo, registerIds);
+	
+	write(pGatewaysockfd, registrationInfo, strlen(registrationInfo), 0);
+	writeToFile(registrationInfo);
+	
+	regAtSecGateway = 1;
 }

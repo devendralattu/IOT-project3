@@ -29,10 +29,10 @@ int main(int argc, char* argv[])
 	file1 = argv[1];
 	file3 = argv[2];
 	
-	/***/ 
+	/***
 	file1 = "BackendConfiguration1.txt";
 	file3 = "PersistentStorage.txt";
-	/***/
+	***/
 	
 	//Database
 	//FILE *fp = fopen("PersistentStorage.txt", "w");	

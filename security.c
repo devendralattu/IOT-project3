@@ -22,8 +22,10 @@ int main(int argc, char* argv[])
 	file1 = argv[1];
 	file3 = argv[2];
 	
-	//file1 = "SecurityConfiguration.txt";
-	//file2 = "SecurityDeviceOutput.log"
+	/****
+	file1 = "SecurityConfiguration.txt";
+	file3 = "output/SecurityDeviceOutput.log";
+	/****/
 	
 	int sockfd;
 	struct sockaddr_in server;
