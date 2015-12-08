@@ -418,7 +418,6 @@ void * connection_handler(void * cs1)
 			else
 			{
 				//wait till we receive and process registerIds from primary gateway and send other gateway's reg info back to it.
-				//while(!((registrationInfo != NULL) && (registrationInfo[0] == '\0')))
 				//while(registrationInfo == NULL)
 				while(regAtSecGateway == 0)
 				{
@@ -596,7 +595,6 @@ void * readRegistrationInfo()
 {
 	int msglen;
 	char readmsg[2000];
-	char * line;
 	
 	gotoLoop:
 	while(msglen = recv(pGatewaysockfd, readmsg, 2000, 0) <= 0)
@@ -606,21 +604,33 @@ void * readRegistrationInfo()
 	
 	printf("\nMessage received >>> %s\n", readmsg);
 	
-	if(strstr(readmsg, "register:") == NULL)
+	if(strstr(readmsg, "registered:") == NULL)
 	{
 		memset(readmsg, 0, sizeof readmsg);
 		goto gotoLoop;
 	}
 	
+	while(id < 1 && reg < 1)
+	{
+		sleep(1);		
+	}
+	
+	//let registerIds be filled with some value from other sensors connecting this Gateway
+	sleep(4);
+	
 	strcpy(registrationInfo, readmsg);
 	memset(readmsg, 0, sizeof readmsg);
 	
-	line = strtok(registerIds, ":"); // removed 'registered'
+	char *foo = &registerIds[0];
+	foo += 11; // remove first 12 characters
+	strcpy(registerIds, foo);
 	
-	printf("\nline === %s && registerIds === %s\n", line, registerIds);
+	printf("\nregisterIds === %s\n", registerIds);
 	
 	strcat(registrationInfo, ":");
 	strcat(registrationInfo, registerIds);
+	
+	printf("registrationInfo >>> %s\n", registrationInfo);
 	
 	write(pGatewaysockfd, registrationInfo, strlen(registrationInfo), 0);
 	writeToFile(registrationInfo);

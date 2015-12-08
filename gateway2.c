@@ -418,7 +418,6 @@ void * connection_handler(void * cs1)
 			else
 			{
 				//wait till we receive and process registerIds from primary gateway and send other gateway's reg info back to it.
-				//while((registrationInfo != NULL) && (registrationInfo[0] == '\0'))
 				//while(registrationInfo == NULL)
 				while(regAtSecGateway == 0)
 				{
