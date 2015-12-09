@@ -12,6 +12,7 @@ void * connection_handler(void *);
 void * threadReadFun(void *);
 void * sendingGatewayThread();
 void * readRegistrationInfo();
+void * threadGatewayReceive();
 
 typedef struct
 {
@@ -47,15 +48,24 @@ char registrationInfo[2000];
 int setReg = 1;
 int setReg2 = 0;
 int regAtSecGateway = 0;
+int createGatewayRecvThread = 1;
 
-int backsockfd, securitySockId, pGatewaysockfd, primary, oGatewaysockfd;
+int backsockfd, securitySockId, primary, gSockFd;
 int vectorClock[4] = {0};
 FILE *fpOutputFile;
 char *file1, *file3;	
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_t thread1, threadRRI, threadGRT;
 
+char globalGWrite[2000];
+char globalSecGWrite[2000];
+char BUFFER[2000];
 int startHeartBeatMsg = 0;
+int REQUEST_TO_PREPARE = 0;
+int VOTE_COMMIT = 0;
+int COMMIT = 0;
+int DONE = 1;
 //-----------------------------------------
 void writeToFile(char * fileData)
 {
@@ -64,13 +74,10 @@ void writeToFile(char * fileData)
 	fclose(fpOutputFile);
 }
 
-void writeToGateway(char *fileMsg)
+void writeToOtherGateway(char *fileMsg)
 {
-	if(primary)
-		write(oGatewaysockfd, fileMsg, strlen(fileMsg));
-	else
-		write(pGatewaysockfd, fileMsg, strlen(fileMsg));
-	printf("\nWriting to other gateway\n");	
+	write(gSockFd, fileMsg, strlen(fileMsg));
+	printf("\nWriting to from gateway to gateway\n");	
 }
 //Check if user or thief has entered or left
 void checkUser()
@@ -96,7 +103,7 @@ void checkUser()
 	    sprintf(fileMsg,"%d.) Security System is OFF\n", msg);
 		write(backsockfd, fileMsg, strlen(fileMsg));
 		write(securitySockId, fileMsg, strlen(fileMsg));
-		writeToGateway(fileMsg);
+		//writeToOtherGateway(fileMsg);
 	} 
 }
 
@@ -127,10 +134,10 @@ int main(int argc, char *argv[])
 	file1 = "GatewayConfiguration2.txt";
 	file3 = "output/GatewayOutput2.log";
 	/*****/
+	strcpy(BUFFER, "");
 	
 	int sockfd,clientsockfd;
 	struct sockaddr_in server, client;
-	pthread_t thread1;
 	
 	//To read the Config File 
 	FILE *fp1 = fopen(file1,"r");	
@@ -186,7 +193,7 @@ int main(int argc, char *argv[])
 		//connect another gateway	
 		struct sockaddr_in pGateway;
 		//create the socket
-		if((pGatewaysockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+		if((gSockFd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 		{
 			printf("\nCould not create other Gateway socket.. Please run primary Gateway first\n");
 		}
@@ -197,8 +204,8 @@ int main(int argc, char *argv[])
 		pGateway.sin_port = htons( pGatewayPort );
 
 		runagain:
-		//Connect gateway to pGatewaysockfd
-		if((connect(pGatewaysockfd, (struct sockaddr *) &pGateway, sizeof(pGateway))) < 0)
+		//Connect gateway to primary gateway
+		if((connect(gSockFd, (struct sockaddr *) &pGateway, sizeof(pGateway))) < 0)
 		{
 			perror("\nUnable to connect Gateway to other Gateway..Waiting for connection from primary Gateway..Trying again..\n");
 			sleep(2);
@@ -208,13 +215,13 @@ int main(int argc, char *argv[])
 	
 		puts("gateway: Connected to other Gateway");
 	
-		write(pGatewaysockfd, configInfo, strlen(configInfo), 0);
+		write(gSockFd, configInfo, strlen(configInfo), 0);
 		puts(configInfo);
 		
 		//sleep(2);
 		//create a new thread for sending messages
 		//pthread_create(&thread1, NULL, &sendingGatewayThread, NULL);
-		pthread_create(&thread1, NULL, &readRegistrationInfo, NULL);
+		pthread_create(&threadRRI, NULL, &readRegistrationInfo, NULL);
     }
     
 	int c;
@@ -341,11 +348,11 @@ void * connection_handler(void * cs1)
 	strcat(writemsg, csArr[itemId].ip);
 	strcat(writemsg, " Registration complete.\nWaiting for other devices to connect before we can start\n"); 
 	
-	//store oGatewaysockfd value
+	//store other Gatewaysockfd value
 	if(strstr(csArr[itemId].name, "ateway") != NULL)
 	{
-		oGatewaysockfd = csArr[itemId].sock;
-		printf("\ncsArr[itemId].name, \"ateway\" >>> oGatewaysockfd = %d\n", oGatewaysockfd);
+		gSockFd = csArr[itemId].sock;
+		printf("\ncsArr[itemId].name, \"ateway\" >>> gSockFd = %d\n", gSockFd);
 	}
 	sleep(1);
 	
@@ -407,8 +414,8 @@ void * connection_handler(void * cs1)
 			printf("\nmessage to pass to P/S Gateway = '''\n%s\n'''\n",registerIds);
 			if(primary)
 			{
-				write(oGatewaysockfd, registerIds, strlen(registerIds));
-				while(msglen = recv(oGatewaysockfd, registrationInfo, 2000, 0) <= 0)
+				write(gSockFd, registerIds, strlen(registerIds));
+				while(msglen = recv(gSockFd, registrationInfo, 2000, 0) <= 0)
 				{
 					continue;
 				}
@@ -441,25 +448,34 @@ void * connection_handler(void * cs1)
 			write(csArr[itemId].sock, registrationInfo, strlen(registrationInfo));	
 
 			pthread_create(&thread1, NULL, &threadReadFun, (void *)&csArr[itemId]);
+			
+			//create receiving thread for gateway's messages only once.
+			if(createGatewayRecvThread)
+			{
+				createGatewayRecvThread = 0;
+				pthread_create(&threadGRT, NULL, &threadGatewayReceive, NULL);
+			}
 		}	
 	}
 	else if(strstr(csArr[itemId].name, "ateway") != NULL)
 	{
 		reg++;
+		/*
 		if(startHeartBeatMsg)
 		{
 			char readmsgGateway[2000];
 			printf("\nMessage received from Gateway\n");
 		
-			while(msglen = recv(oGatewaysockfd, readmsgGateway, 2000, 0) > 0 )
+			while(msglen = recv(gSockFd, readmsgGateway, 2000, 0) > 0 )
 			{
 				printf("Message received = %s\n", readmsgGateway);
 				writeToFile(readmsgGateway);
 			
-				write(oGatewaysockfd, heartBeat, strlen(heartBeat));
+				write(gSockFd, heartBeat, strlen(heartBeat));
 				memset(readmsg, 0, sizeof(readmsgGateway));
 			}
-		}	
+		}
+		*/	
 	}																																																			
 }
 
@@ -469,6 +485,7 @@ void* threadReadFun(void *cs1)
 	char readmsg[2000];
 	char readBackmsg[2000];
 	char sendmsg[2000];
+	char sendToGMsg[2000];
 	char vectInfo[50];
 	char fileMsg[100];
 	int switcher = 0;
@@ -480,7 +497,54 @@ void* threadReadFun(void *cs1)
 		strcpy(readBackmsg, readmsg);
 		sprintf(fileMsg, "Message received from %s = %s\n", cs.name, readBackmsg);
 		
+		strcat(BUFFER, readBackmsg);
+		strcat(BUFFER, "\n");
+		
 		pthread_mutex_lock(&mutex);
+
+		if(primary)
+		{
+			checkForDoneRequest:
+			if(DONE)		
+			{
+				DONE = 0;
+				//sprintf(globalGWrite, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
+				sprintf(sendToGMsg, "Request_To_Prepare:%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
+				memset(BUFFER, 0, sizeof(BUFFER));
+			
+				//send message to secondary Gateway
+				writeToOtherGateway(sendToGMsg);
+			
+				memset(sendToGMsg, 0, sizeof(sendToGMsg));
+			}
+			else
+			{
+				goto checkForDoneRequest;
+			}	
+		}
+		else
+		{
+			checkForPrepareRequest:
+			if(REQUEST_TO_PREPARE && VOTE_COMMIT)
+			{
+				VOTE_COMMIT = 0;
+				REQUEST_TO_PREPARE = 0;
+				
+				sprintf(globalSecGWrite, "%d;%s;%s;%d;%s\n", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
+				sprintf(sendToGMsg, "Vote_Commit:%d;%s;%s;%d;%s\n", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
+				memset(BUFFER, 0, sizeof(BUFFER));
+				
+				//send message to primary Gateway
+				writeToOtherGateway(sendToGMsg);
+				memset(sendToGMsg, 0, sizeof(sendToGMsg));		
+			}	
+			else
+			{
+				goto checkForPrepareRequest;
+			}
+		}
+		
+		
 		writeToFile(fileMsg);		
 			
 		strcpy(vectInfo, strtok(readmsg, ";"));//timestamp
@@ -498,59 +562,12 @@ void* threadReadFun(void *cs1)
 		}	
 		printf("\n");
 		
-		//------------------------------Logic for Security System------------------------------
-
-		if(strcmp(cs.name, "keychain") == 0)
-				switcher = 0;
-		else if (strcmp(cs.name, "motionsensor") == 0)
-				switcher = 1;
-		else if (strcmp(cs.name, "door") == 0)
-				switcher = 2;
-			       
-
-        switch(switcher)
-        {
-            case 0: //keychain
-                prevState[0] = currState[0];
-                if(strcmp(vectInfo, "True") == 0)
-                {
-                    currState[0] = 1;
-                }    
-                else
-                    currState[0] = 0;
-
-				checkUser();
-				checkThief();
-                break;
-           
-            case 1: //motionsensor
-                prevState[1] = currState[1];
-                if(strcmp(vectInfo, "True") == 0)
-                    currState[1] = 1;
-                else
-                    currState[1] = 0;   
-                checkThief();
-                break;
-           
-            case 2: //door
-                prevState[2] = currState[2];
-                if(strcmp(vectInfo, "Open") == 0)
-                    currState[2] = 1;
-                else   
-                    currState[2] = 0;
-                break;
-           
-            default:
-                printf("\n In default case");
-                break;
-        }  
 		
-		sprintf(sendmsg, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, readBackmsg);
-		write(backsockfd, sendmsg, strlen(sendmsg));	
-		writeToGateway(sendmsg);
+		//sprintf(sendmsg, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, readBackmsg);
+		//write(backsockfd, sendmsg, strlen(sendmsg));
 					
 		pthread_mutex_unlock(&mutex);		
-		printf("Message sent to backend = %s\n",sendmsg);
+		//printf("Message sent to backend = %s\n",sendmsg);
 		
 		memset(sendmsg, 0, sizeof(sendmsg));
 		memset(readmsg, 0, sizeof(readmsg));
@@ -573,15 +590,15 @@ void* sendingGatewayThread()
 {
 	int msglen;
 	char readmsg[2000];
-	printf("\n pGatewaysockfd = %d\n", pGatewaysockfd);
+	printf("\n primary gSockFd = %d\n", gSockFd);
 	printf("inside while of sendingGatewayThread\n");
 	while(1)
 	{
 		puts(heartBeat);
-		write(pGatewaysockfd, heartBeat, strlen(heartBeat), 0);
+		write(gSockFd, heartBeat, strlen(heartBeat), 0);
 
 		memset(readmsg, 0, sizeof readmsg);
-		while(msglen = recv(pGatewaysockfd, readmsg, 2000, 0) <= 0)
+		while(msglen = recv(gSockFd, readmsg, 2000, 0) <= 0)
 		{
 			continue;
 		}
@@ -597,7 +614,7 @@ void * readRegistrationInfo()
 	char readmsg[2000];
 	
 	gotoLoop:
-	while(msglen = recv(pGatewaysockfd, readmsg, 2000, 0) <= 0)
+	while(msglen = recv(gSockFd, readmsg, 2000, 0) <= 0)
 	{
 		continue;
 	}
@@ -632,8 +649,88 @@ void * readRegistrationInfo()
 	
 	printf("registrationInfo >>> %s\n", registrationInfo);
 	
-	write(pGatewaysockfd, registrationInfo, strlen(registrationInfo), 0);
-	writeToFile(registrationInfo);
+	write(gSockFd, registrationInfo, strlen(registrationInfo), 0);
+	
+	//writeToFile(registrationInfo);
+	//writeToFile("\n");
 	
 	regAtSecGateway = 1;
+}
+
+void * threadGatewayReceive()
+{
+	char gReadMsg[2000];
+	char gWriteMsg[2000];
+	int msglen;
+	TGR:
+	while(msglen = recv(gSockFd, gReadMsg, 2000, 0) > 0)
+	{
+		// Prepare
+		if(strstr(gReadMsg,"Request_To_Prepare") != NULL)	
+		{
+			strcat(gReadMsg, "\n");
+			writeToFile(gReadMsg);
+							
+			//Take message from primary and append secondary's message later.				
+			char *foo = &gReadMsg[0];
+			foo += 19; // remove first 19 characters
+			strcpy(globalGWrite, foo);
+			
+			REQUEST_TO_PREPARE = 1;
+			VOTE_COMMIT = 1;
+			
+			memset(gReadMsg, 0, sizeof(gReadMsg));
+		}
+		
+		else if(strstr(gReadMsg,"Vote_Commit") != NULL)
+		{
+			strcat(gReadMsg, "\n");
+			writeToFile(gReadMsg);
+			
+			//Take primary(own's) message and append the message received from secondary.
+			char *foo = &gReadMsg[0];
+			foo += 12; // remove first 12 characters
+			strcpy(gReadMsg, foo);
+			
+			sprintf(globalGWrite, "%s%s", globalGWrite, gReadMsg);
+			write(backsockfd, globalGWrite, strlen(globalGWrite));
+			memset(globalGWrite, 0, sizeof(globalGWrite));
+					
+			writeToOtherGateway("Commit");
+			
+			memset(gReadMsg, 0, sizeof(gReadMsg));
+		}
+		
+		//Commit
+		else if(strstr(gReadMsg,"Commit") != NULL)
+		{
+			strcat(gReadMsg, "\n");
+			writeToFile(gReadMsg);
+			
+			//append and write message
+			sprintf(globalGWrite, "%s%s", globalGWrite, globalSecGWrite);
+			write(backsockfd, globalGWrite, strlen(globalGWrite));
+			
+			memset(globalGWrite, 0, sizeof(globalGWrite));
+			memset(globalSecGWrite, 0, sizeof(globalSecGWrite));
+			
+			writeToOtherGateway("Done");
+			
+			memset(gReadMsg, 0, sizeof(gReadMsg));
+		}
+		
+		else if(strstr(gReadMsg,"Done") != NULL)
+		{
+			strcat(gReadMsg, "\n");
+			writeToFile(gReadMsg);
+			//stop bufferring of messages and send the buffered ones.
+			VOTE_COMMIT = 1;
+			REQUEST_TO_PREPARE = 1;
+			DONE = 1;
+			
+			memset(gReadMsg, 0, sizeof(gReadMsg));
+		}
+	}
+	memset(gReadMsg, 0, sizeof(gReadMsg));
+	goto TGR;
 }
