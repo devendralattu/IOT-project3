@@ -58,14 +58,16 @@ char *file1, *file3;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_t thread1, threadRRI, threadGRT;
 
-char globalGWrite[2000];
-char globalSecGWrite[2000];
-char BUFFER[2000];
 int startHeartBeatMsg = 0;
+
+int Count;
+char Buffer[2000];
 int REQUEST_TO_PREPARE = 0;
 int VOTE_COMMIT = 0;
 int COMMIT = 0;
 int DONE = 1;
+char globalWrite[1000];
+
 //-----------------------------------------
 void writeToFile(char * fileData)
 {
@@ -79,51 +81,6 @@ void writeToOtherGateway(char *fileMsg)
 	write(gSockFd, fileMsg, strlen(fileMsg));
 	printf("\nWriting to from gateway to gateway\n");	
 }
-//Check if user or thief has entered or left
-void checkUser()
-{
-    char fileMsg[100];
-    int msg;
-    msg = 0;
-
-    //User has left home
-    if(//(prevState[2] == 0 && currState[2] == 1) //Door 
-		//&& prevState[1] == 1 && currState[1] == 0 //Motion
-		(prevState[0] == 1 && currState[0] == 0))//Key
-	{
-	    sprintf(fileMsg,"%d.) Security System is ON\n", msg);
-		write(backsockfd, fileMsg, strlen(fileMsg));
-		write(securitySockId, fileMsg, strlen(fileMsg));
-	}
-   
-	//User has come home
-	if( //currState[1] == 1 //motion 
-	prevState[0] == 0 && currState[0] == 1)//Key
-	{
-	    sprintf(fileMsg,"%d.) Security System is OFF\n", msg);
-		write(backsockfd, fileMsg, strlen(fileMsg));
-		write(securitySockId, fileMsg, strlen(fileMsg));
-		//writeToOtherGateway(fileMsg);
-	} 
-}
-
-void checkThief()
-{
-    char fileMsg[100];
-    int msg;
-    msg = 1;
-   
-	//Thief has come home
-	if(((prevState[2] == 0 && currState[2] == 1)//Door
-	|| (prevState[1] == 0 && currState[1] == 1))//Motion
-	&& (prevState[0] == 0 && currState[0] == 0))//Key
-	{
-		sprintf(fileMsg,"%d.) Burglar ALARM!!!\n ", msg);
-		write(backsockfd, fileMsg, strlen(fileMsg));
-	}  
-}
-//--------------------------------------------------------------------------
-
 
 int main(int argc, char *argv[])
 {	
@@ -134,7 +91,6 @@ int main(int argc, char *argv[])
 	file1 = "GatewayConfiguration1.txt";
 	file3 = "output/GatewayOutput1.log";
 	/*****/
-	strcpy(BUFFER, "");
 	
 	int sockfd,clientsockfd;
 	struct sockaddr_in server, client;
@@ -496,57 +452,48 @@ void* threadReadFun(void *cs1)
 		printf("Message received from %s = %s\n", cs.name, readmsg);
 		strcpy(readBackmsg, readmsg);
 		sprintf(fileMsg, "Message received from %s = %s\n", cs.name, readBackmsg);
+		sprintf(sendToGMsg, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, readBackmsg);
 		
-		strcat(BUFFER, readBackmsg);
-		strcat(BUFFER, "\n");
-		
+		/*
 		pthread_mutex_lock(&mutex);
-
+		
+		//send the same message to other Gateway
+		writeToOtherGateway(sendToGMsg);
+		memset(sendToGMsg, 0, sizeof(sendToGMsg));
+		*/
+		
+		writeToFile(fileMsg);	
+			
 		if(primary)
 		{
-			checkForDoneRequest:
-			if(DONE)		
-			{
+		
+			//{
+				printf("In Primary sersor recv. . . . .");
+				puts(readmsg);
+				
+				strcat(globalWrite, "\n");
+				strcat(globalWrite, sendToGMsg);
 				DONE = 0;
 				//sprintf(globalGWrite, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
-				sprintf(sendToGMsg, "Request_To_Prepare:%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
-				memset(BUFFER, 0, sizeof(BUFFER));
+				sprintf(sendToGMsg, "Request_To_Prepare:%s\n", globalWrite);
+				printf("\nSending message:Req to prep\n ");
+				puts(sendToGMsg);
+				//memset(BUFFER, 0, sizeof(BUFFER));
 			
 				//send message to secondary Gateway
 				writeToOtherGateway(sendToGMsg);
 			
-				memset(sendToGMsg, 0, sizeof(sendToGMsg));
-			}
-			else
-			{
-				goto checkForDoneRequest;
-			}	
+				//memset(readmsg, 0, sizeof(readmsg));
+				//memset(sendToGMsg, 0, sizeof(sendToGMsg));
+			//}	
 		}
 		else
 		{
-			checkForPrepareRequest:
-			if(REQUEST_TO_PREPARE && VOTE_COMMIT)
-			{
-				VOTE_COMMIT = 0;
-				REQUEST_TO_PREPARE = 0;
-				
-				sprintf(globalSecGWrite, "%d;%s;%s;%d;%s\n", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
-				sprintf(sendToGMsg, "Vote_Commit:%d;%s;%s;%d;%s\n", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
-				memset(BUFFER, 0, sizeof(BUFFER));
-				
-				//send message to primary Gateway
+				printf("\nSending msg received from sensor to primary gateway\n");
+				puts(sendToGMsg);
 				writeToOtherGateway(sendToGMsg);
-				memset(sendToGMsg, 0, sizeof(sendToGMsg));		
-			}	
-			else
-			{
-				goto checkForPrepareRequest;
-			}
-		}
+		}	
 		
-		
-		writeToFile(fileMsg);		
-			
 		strcpy(vectInfo, strtok(readmsg, ";"));//timestamp
 		strcpy(vectInfo, strtok(NULL, ";"));//state
 		
@@ -561,13 +508,6 @@ void* threadReadFun(void *cs1)
 			}
 		}	
 		printf("\n");
-		
-		
-		//sprintf(sendmsg, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, readBackmsg);
-		//write(backsockfd, sendmsg, strlen(sendmsg));
-					
-		pthread_mutex_unlock(&mutex);		
-		//printf("Message sent to backend = %s\n",sendmsg);
 		
 		memset(sendmsg, 0, sizeof(sendmsg));
 		memset(readmsg, 0, sizeof(readmsg));
@@ -584,7 +524,6 @@ void* threadReadFun(void *cs1)
 		perror("\nDisconnected "); 
 	}
 }
-
 
 void* sendingGatewayThread()
 {
@@ -650,87 +589,133 @@ void * readRegistrationInfo()
 	printf("registrationInfo >>> %s\n", registrationInfo);
 	
 	write(gSockFd, registrationInfo, strlen(registrationInfo), 0);
-	
-	//writeToFile(registrationInfo);
-	//writeToFile("\n");
+	writeToFile(registrationInfo);
+	writeToFile("\n");
 	
 	regAtSecGateway = 1;
 }
 
 void * threadGatewayReceive()
 {
-	char gReadMsg[2000];
-	char gWriteMsg[2000];
+	char readmsg[2000];
 	int msglen;
+	char sendToGMsg[2000];
+	char temp[2000];
+	
 	TGR:
-	while(msglen = recv(gSockFd, gReadMsg, 2000, 0) > 0)
+	while(msglen = recv(gSockFd, readmsg, 2000, 0) > 0)
 	{
-		// Prepare
-		if(strstr(gReadMsg,"Request_To_Prepare") != NULL)	
-		{
-			strcat(gReadMsg, "\n");
-			writeToFile(gReadMsg);
-							
-			//Take message from primary and append secondary's message later.				
-			char *foo = &gReadMsg[0];
-			foo += 19; // remove first 19 characters
-			strcpy(globalGWrite, foo);
-			
-			REQUEST_TO_PREPARE = 1;
-			VOTE_COMMIT = 1;
-			
-			memset(gReadMsg, 0, sizeof(gReadMsg));
-		}
+		//strcpy(readBackmsg, readmsg);
+		//sprintf(fileMsg, "Message received from %s = %s\n", cs.name, readBackmsg);
+		//sprintf(sendToGMsg, );
+		/*
+		pthread_mutex_lock(&mutex);
 		
-		else if(strstr(gReadMsg,"Vote_Commit") != NULL)
+		//send the same message to other Gateway
+		writeToOtherGateway(sendToGMsg);
+		memset(sendToGMsg, 0, sizeof(sendToGMsg));
+		*/
+		
+		strcat(readmsg, "\n");
+		writeToFile(readmsg);	
+			
+		if(primary)
 		{
-			strcat(gReadMsg, "\n");
-			writeToFile(gReadMsg);
-			
-			//Take primary(own's) message and append the message received from secondary.
-			char *foo = &gReadMsg[0];
-			foo += 12; // remove first 12 characters
-			strcpy(gReadMsg, foo);
-			
-			sprintf(globalGWrite, "%s%s", globalGWrite, gReadMsg);
-			write(backsockfd, globalGWrite, strlen(globalGWrite));
-			memset(globalGWrite, 0, sizeof(globalGWrite));
+			printf("In Primary . . . . .");
+			puts(readmsg);
+			//strcpy(globalWrite, sendToGMsg);
+			//checkForDoneRequest:
+			//if(DONE)		
+			//{
+			if(strstr(readmsg,"Vote_Commit") != NULL)
+			{ 
+				printf("\nInside Vote commit");
+				
+				//strtok(readmsg, ":");
+				//globalWrite = strtok(NULL, "\n");
+				strcpy(temp, globalWrite);
+				sprintf(globalWrite, "T%d:%s",++Count, temp);
+				write(backsockfd, globalWrite, strlen(globalWrite));
+				memset(globalWrite, 0, sizeof(globalWrite));
 					
-			writeToOtherGateway("Commit");
+				writeToOtherGateway("Commit\0");
 			
-			memset(gReadMsg, 0, sizeof(gReadMsg));
-		}
+				memset(readmsg, 0, sizeof(readmsg));
+			}
+			
+			else if(strstr(readmsg,"Done") != NULL)
+			{
+				printf("\nInside Done");
+				//stop bufferring of messages and send the buffered ones.
+				VOTE_COMMIT = 1;
+				REQUEST_TO_PREPARE = 1;
+				DONE = 1;
+			
+				memset(readmsg, 0, sizeof(readmsg));
+			}
 		
-		//Commit
-		else if(strstr(gReadMsg,"Commit") != NULL)
-		{
-			strcat(gReadMsg, "\n");
-			writeToFile(gReadMsg);
-			
-			//append and write message
-			sprintf(globalGWrite, "%s%s", globalGWrite, globalSecGWrite);
-			write(backsockfd, globalGWrite, strlen(globalGWrite));
-			
-			memset(globalGWrite, 0, sizeof(globalGWrite));
-			memset(globalSecGWrite, 0, sizeof(globalSecGWrite));
-			
-			writeToOtherGateway("Done");
-			
-			memset(gReadMsg, 0, sizeof(gReadMsg));
+			else
+			{
+				printf("\nInside primary else");
+				//DONE = 0;
+				//sprintf(globalGWrite, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
+				sprintf(sendToGMsg, "Request_To_Prepare:%s", readmsg);
+				//puts(sendToGMsg);
+				//memset(BUFFER, 0, sizeof(BUFFER));
+				
+				//send message to secondary Gateway
+				writeToOtherGateway(sendToGMsg);
+				strtok(sendToGMsg, ":");
+				//strcat(globalWrite, "\n");
+				strcat(globalWrite, strtok(NULL, "\n"));
+				memset(readmsg, 0, sizeof(readmsg));
+				//memset(sendToGMsg, 0, sizeof(sendToGMsg));
+			}
 		}
-		
-		else if(strstr(gReadMsg,"Done") != NULL)
+		else
 		{
-			strcat(gReadMsg, "\n");
-			writeToFile(gReadMsg);
-			//stop bufferring of messages and send the buffered ones.
-			VOTE_COMMIT = 1;
-			REQUEST_TO_PREPARE = 1;
-			DONE = 1;
+			printf("Other gateway . . .");
+			puts(readmsg);
 			
-			memset(gReadMsg, 0, sizeof(gReadMsg));
+			if(strstr(readmsg,"Request_To_Prepare") != NULL)	
+			{
+				printf("\nInside Req to prepare");
+							
+				strtok(readmsg, ":");
+				strcpy(globalWrite, strtok(NULL, "\n"));
+			
+				REQUEST_TO_PREPARE = 1;
+				VOTE_COMMIT = 1;
+				
+				//sprintf(globalSecGWrite, "%d;%s;%s;%d;%s\n", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
+				//sprintf(sendToGMsg, "Vote_Commit:%s\n", globalWrite);
+				writeToOtherGateway("Vote_Commit\0");
+				//memset(BUFFER, 0, sizeof(BUFFER));
+				memset(sendToGMsg, 0, sizeof(sendToGMsg));
+			}
+			
+			else if(strstr(readmsg,"Commit") != NULL)
+			{
+				printf("\nInside commit");
+			
+				//append and write message
+				strcpy(temp, globalWrite);
+				sprintf(globalWrite, "T%d:%s",++Count, temp);
+				write(backsockfd, globalWrite, strlen(globalWrite));
+				
+				memset(globalWrite, 0, sizeof(globalWrite)); //changed!!
+			
+				writeToOtherGateway("Done");
+			}
+		
+			else
+			{
+				printf("\nInside other gateway else");
+			//	writeToOtherGateway(sendToGMsg);
+			}
+			
+			memset(readmsg, 0, sizeof(readmsg));
+			memset(sendToGMsg, 0, sizeof(sendToGMsg));
 		}
 	}
-	memset(gReadMsg, 0, sizeof(gReadMsg));
-	goto TGR;
 }
