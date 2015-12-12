@@ -1,20 +1,75 @@
-Message received from keychain = 1449433059;True;1;0;1
-Message received from motionsensor = 1449433060;True;1;1;1
-Message received from keychain = 1449433064;True;2;1;1
-Message received from motionsensor = 1449433065;True;2;2;1
-Message received from keychain = 1449433069;False;3;2;2
-Message received from motionsensor = 1449433070;False;3;3;2
-Message received from keychain = 1449433074;False;4;3;2
-Message received from motionsensor = 1449433075;False;4;4;2
-Message received from keychain = 1449433079;True;5;4;3
-Message received from motionsensor = 1449433080;True;5;5;3
-Message received from keychain = 1449433084;True;6;5;3
-Message received from motionsensor = 1449433085;True;6;6;3
-Message received from keychain = 1449433089;True;7;6;4
-Message received from motionsensor = 1449433090;True;7;7;4
-Message received from keychain = 1449433094;True;8;7;5
-Message received from motionsensor = 1449433095;True;8;8;5
-Message received from keychain = 1449433099;False;9;8;6
-Message received from motionsensor = 1449433100;False;9;9;6
-Message received from keychain = 1449433104;False;10;9;6
-Message received from motionsensor = 1449433105;False;10;10;6
+0;door;127.0.0.1;8084;1449888455;Open;0;0;1
+Vote_Commit
+Done
+Message received from keychain = 1449888456;True;1;0;1
+Vote_Commit
+Done
+Message received from motionsensor = 1449888457;True;1;1;1
+Vote_Commit
+Done
+Message received from keychain = 1449888461;True;2;1;1
+Vote_Commit
+Done
+Message received from motionsensor = 1449888462;True;2;2;1
+Vote_Commit
+Done
+0;door;127.0.0.1;8084;1449888465;Close;2;2;2
+Vote_Commit
+Done
+Message received from keychain = 1449888466;False;3;2;2
+Vote_Commit
+Done
+Message received from motionsensor = 1449888467;False;3;3;2
+Vote_Commit
+Done
+Message received from keychain = 1449888471;False;4;3;2
+Vote_Commit
+Done
+Message received from motionsensor = 1449888472;False;4;4;2
+Vote_Commit
+Done
+0;door;127.0.0.1;8084;1449888475;Open;4;4;3
+Vote_Commit
+Done
+Message received from keychain = 1449888476;True;5;4;3
+Vote_Commit
+Done
+Message received from motionsensor = 1449888477;True;5;5;3
+Vote_Commit
+Done
+Message received from keychain = 1449888481;True;6;5;3
+Vote_Commit
+Done
+Message received from motionsensor = 1449888482;True;6;6;3
+Vote_Commit
+Done
+0;door;127.0.0.1;8084;1449888485;Close;6;6;4
+Vote_Commit
+Done
+Message received from keychain = 1449888486;True;7;6;4
+Vote_Commit
+Done
+Message received from motionsensor = 1449888487;True;7;7;4
+Vote_Commit
+Done
+0;door;127.0.0.1;8084;1449888490;Open;7;7;5
+Vote_Commit
+Done
+Message received from keychain = 1449888491;True;8;7;5
+Vote_Commit
+Done
+0;door;127.0.0.1;8084;1449888492;Close;8;7;6
+Vote_Commit
+Done
+Message received from motionsensor = 1449888492;True;8;8;6
+Vote_Commit
+Done
+Message received from keychain = 1449888496;False;9;8;6
+Vote_Commit
+Done
+Message received from motionsensor = 1449888497;False;9;9;6
+Vote_Commit
+Done
+Message received from keychain = 1449888501;False;10;9;6
+Vote_Commit
+Done
