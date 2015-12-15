@@ -10,9 +10,11 @@
 
 void * connection_handler(void *);
 void * threadReadFun(void *);
-void * sendingGatewayThread(void *);
+void * sendingAliveToClientThread(void *);
+void * sendingAliveToGatewayThread();
 void * readRegistrationInfo();
 void * threadGatewayReceive();
+void * checkAliveGateway();
 
 typedef struct
 {
@@ -56,7 +58,7 @@ FILE *fpOutputFile;
 char *file1, *file3;	
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_t thread1, threadRRI, threadGRT;
+pthread_t thread1, threadRRI, threadGRT, chkAliveThread, sendAliveCThread, sendAliveGThread;
 
 int startHeartBeatMsg = 0;
 
@@ -67,6 +69,8 @@ int VOTE_COMMIT = 0;
 int COMMIT = 0;
 int DONE = 1;
 char globalWrite[1000];
+int sleepCount = 0, sleepLimit = 999;
+int otherGatewayAlive = 1;
 
 //-----------------------------------------
 void writeToFile(char * fileData)
@@ -176,8 +180,9 @@ int main(int argc, char *argv[])
 		
 		//sleep(2);
 		//create a new thread for sending messages
-		//pthread_create(&thread1, NULL, &sendingGatewayThread, NULL);
+		//pthread_create(&thread1, NULL, &sendingAliveToClientThread, NULL);
 		pthread_create(&threadRRI, NULL, &readRegistrationInfo, NULL);
+		pthread_create(&sendAliveGThread, NULL, &sendingAliveToGatewayThread, NULL);
     }
     
 	int c;
@@ -267,7 +272,7 @@ void * connection_handler(void * cs1)
 	sleep(1);
 	id++;
 	int itemId = id;
-	pthread_t thread1, sendAliveThread;
+	pthread_t thread1;
 	clientStruct1 cs = *(clientStruct1*)(cs1);
 	csArr[itemId].sock = cs.sock;	
 
@@ -303,7 +308,6 @@ void * connection_handler(void * cs1)
 	strcpy(csArr[itemId].name, strtok(regInfo, ":"));
 	strcpy(csArr[itemId].ip, strtok(NULL,":"));
 	csArr[itemId].port = atoi(strtok(NULL,":"));
-	csArr[itemId].registered = 1;
 	csArr[itemId].value = 0;
 	csArr[itemId].idNum = itemId;
 	
@@ -318,6 +322,8 @@ void * connection_handler(void * cs1)
 	{
 		gSockFd = csArr[itemId].sock;
 		printf("\ncsArr[itemId].name, \"ateway\" >>> gSockFd = %d\n", gSockFd);
+		csArr[itemId].registered = 1;
+		pthread_create(&sendAliveGThread, NULL, &sendingAliveToGatewayThread, NULL);
 	}
 	sleep(1);
 	
@@ -328,6 +334,7 @@ void * connection_handler(void * cs1)
 	//check if message is received from 3 sensors or security device.
 	if((strstr(csArr[itemId].name, "door") != NULL) || (strstr(csArr[itemId].name, "motion") != NULL) || (strstr(csArr[itemId].name, "keychain") != NULL) || (strstr(csArr[itemId].name, "security") != NULL))
 	{
+		pthread_create(&sendAliveCThread, NULL, &sendingAliveToClientThread, (void *)&csArr[itemId]);
 		reg++;
 		
 		if(strstr(csArr[itemId].name, "security") != NULL)
@@ -380,9 +387,14 @@ void * connection_handler(void * cs1)
 			if(primary)
 			{
 				write(gSockFd, registerIds, strlen(registerIds));
+				recvRegInfo:
 				while(msglen = recv(gSockFd, registrationInfo, 2000, 0) <= 0)
 				{
 					continue;
+				}
+				if(strstr(registrationInfo, "Alive") != NULL)
+				{
+					goto recvRegInfo;
 				}
 				printf("\nInside if part >> registrationInfo = %s\n", registrationInfo);
 				setReg2 = 1;
@@ -409,10 +421,7 @@ void * connection_handler(void * cs1)
 		if(setReg2)
 		{
 			puts("Inside setReg2");
-			
 			write(csArr[itemId].sock, registrationInfo, strlen(registrationInfo));	
-			
-			pthread_create(&sendAliveThread, NULL, &sendingGatewayThread, (void *)&csArr[itemId].sock);
 			pthread_create(&thread1, NULL, &threadReadFun, (void *)&csArr[itemId]);
 			
 			//create receiving thread for gateway's messages only once.
@@ -421,6 +430,8 @@ void * connection_handler(void * cs1)
 				createGatewayRecvThread = 0;
 				pthread_create(&threadGRT, NULL, &threadGatewayReceive, NULL);
 			}
+			sleep(1);
+			csArr[itemId].registered = 1;
 		}	
 	}
 	else if(strstr(csArr[itemId].name, "ateway") != NULL)
@@ -471,39 +482,45 @@ void* threadReadFun(void *cs1)
 		writeToOtherGateway(sendToGMsg);
 		memset(sendToGMsg, 0, sizeof(sendToGMsg));
 		*/
-		
+		strcat(fileMsg, ": Sending Request to prepare");
 		writeToFile(fileMsg);	
-			
-		if(primary)
-		{
 		
-			//{
-				printf("In Primary sersor recv. . . . .");
-				puts(readmsg);
+		// If other gateway fails, simply write whatever you receive in your persistent storage file
+		if(otherGatewayAlive)
+		{
+			if(primary)
+			{
+				//{
+					printf("In Primary sersor recv. . . . .");
+					puts(readmsg);
 				
-				strcat(globalWrite, "\n");
-				strcat(globalWrite, sendToGMsg);
-				DONE = 0;
-				//sprintf(globalGWrite, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
-				sprintf(sendToGMsg, "Request_To_Prepare:%s\n", globalWrite);
-				printf("\nSending message:Req to prep\n ");
-				puts(sendToGMsg);
-				//memset(BUFFER, 0, sizeof(BUFFER));
+					strcat(globalWrite, "\n");
+					strcat(globalWrite, sendToGMsg);
+					DONE = 0;
+					//sprintf(globalGWrite, "%d;%s;%s;%d;%s", cs.idNum, cs.name, cs.ip, cs.port, BUFFER);
+					sprintf(sendToGMsg, "Request_To_Prepare:%s\n", globalWrite);
+					printf("\nSending message:Req to prep\n ");
+					puts(sendToGMsg);
+					//memset(BUFFER, 0, sizeof(BUFFER));
 			
-				//send message to secondary Gateway
-				writeToOtherGateway(sendToGMsg);
+					//send message to secondary Gateway
+					writeToOtherGateway(sendToGMsg);
 			
-				//memset(readmsg, 0, sizeof(readmsg));
-				//memset(sendToGMsg, 0, sizeof(sendToGMsg));
-			//}	
+					//memset(readmsg, 0, sizeof(readmsg));
+					//memset(sendToGMsg, 0, sizeof(sendToGMsg));
+				//}	
+			}
+			else
+			{
+					printf("\nSending msg received from sensor to primary gateway\n");
+					puts(sendToGMsg);
+					writeToOtherGateway(sendToGMsg);
+			}	
 		}
 		else
 		{
-				printf("\nSending msg received from sensor to primary gateway\n");
-				puts(sendToGMsg);
-				writeToOtherGateway(sendToGMsg);
-		}	
-		
+			write(backsockfd, sendToGMsg, strlen(sendToGMsg));
+		}
 		strcpy(vectInfo, strtok(readmsg, ";"));//timestamp
 		strcpy(vectInfo, strtok(NULL, ";"));//state
 		
@@ -535,16 +552,18 @@ void* threadReadFun(void *cs1)
 	}
 }
 
-void * sendingGatewayThread(void * cSockFDArg)
+void * sendingAliveToClientThread(void * cSockFDArg)
 {
-	int cSockFD = *(int *)(cSockFDArg);
+	clientStruct1 csNew = *(clientStruct1*)(cSockFDArg);
+	int cSockFD = csNew.sock;
 	int tempVariable = 0;
 	printf("\ncSockFD = %d\n", cSockFD);
-	while(1)
+	
+	while(csNew.registered)
 	{
 		puts(heartBeat);
 		write(cSockFD, heartBeat, strlen(heartBeat), 0);
-
+		
 		sleep(5);
 		/* Temp code to switch to other Gateway after sending 2 messages to its Gateway.
 		if(++tempVariable == 2)
@@ -552,6 +571,19 @@ void * sendingGatewayThread(void * cSockFDArg)
 			break;
 		}
 		*/
+	}	
+}
+
+void * sendingAliveToGatewayThread()
+{
+	pthread_create(&chkAliveThread, NULL, &checkAliveGateway, NULL);
+	
+	while(otherGatewayAlive)
+	{
+		puts(heartBeat);
+		write(gSockFd, heartBeat, strlen(heartBeat), 0);
+		
+		sleep(5);
 	}	
 }
 
@@ -613,17 +645,6 @@ void * threadGatewayReceive()
 	TGR:
 	while(msglen = recv(gSockFd, readmsg, 2000, 0) > 0)
 	{
-		//strcpy(readBackmsg, readmsg);
-		//sprintf(fileMsg, "Message received from %s = %s\n", cs.name, readBackmsg);
-		//sprintf(sendToGMsg, );
-		/*
-		pthread_mutex_lock(&mutex);
-		
-		//send the same message to other Gateway
-		writeToOtherGateway(sendToGMsg);
-		memset(sendToGMsg, 0, sizeof(sendToGMsg));
-		*/
-		
 		strcat(readmsg, "\n");
 		writeToFile(readmsg);	
 			
@@ -635,10 +656,16 @@ void * threadGatewayReceive()
 			//checkForDoneRequest:
 			//if(DONE)		
 			//{
-			if(strstr(readmsg,"Vote_Commit") != NULL)
+			if(strstr(readmsg, "Alive") != NULL)
+			{
+				sleepLimit = 6;
+				sleepCount = 0;
+				memset(readmsg, 0, sizeof readmsg);
+			}
+			else if(strstr(readmsg,"Vote_Commit") != NULL)
 			{ 
 				printf("\nInside Vote commit");
-				
+				writeToFile(": Received Vote to Commit Changes\n");
 				//strtok(readmsg, ":");
 				//globalWrite = strtok(NULL, "\n");
 				strcpy(temp, globalWrite);
@@ -653,6 +680,7 @@ void * threadGatewayReceive()
 			
 			else if(strstr(readmsg,"Done") != NULL)
 			{
+				writeToFile(": Changes committed\n");
 				printf("\nInside Done");
 				//stop bufferring of messages and send the buffered ones.
 				VOTE_COMMIT = 1;
@@ -685,10 +713,16 @@ void * threadGatewayReceive()
 			printf("Other gateway . . .");
 			puts(readmsg);
 			
-			if(strstr(readmsg,"Request_To_Prepare") != NULL)	
+			if(strstr(readmsg, "Alive") != NULL)
+			{
+				sleepLimit = 6;
+				sleepCount = 0;
+				memset(readmsg, 0, sizeof readmsg);
+			}
+			else if(strstr(readmsg,"Request_To_Prepare") != NULL)	
 			{
 				printf("\nInside Req to prepare");
-							
+				writeToFile(": Received a new message to commit\n");
 				strtok(readmsg, ":");
 				strcpy(globalWrite, strtok(NULL, "\n"));
 			
@@ -705,7 +739,7 @@ void * threadGatewayReceive()
 			else if(strstr(readmsg,"Commit") != NULL)
 			{
 				printf("\nInside commit");
-			
+				writeToFile(": Received Commit from Coordinator\n");
 				//append and write message
 				strcpy(temp, globalWrite);
 				sprintf(globalWrite, "T%d:%s",++Count, temp);
@@ -726,4 +760,14 @@ void * threadGatewayReceive()
 			memset(sendToGMsg, 0, sizeof(sendToGMsg));
 		}
 	}
+}
+
+void * checkAliveGateway()
+{
+	while(sleepCount < sleepLimit)
+	{
+		sleepCount++;
+		sleep(1);
+	}
+	otherGatewayAlive = 0;
 }

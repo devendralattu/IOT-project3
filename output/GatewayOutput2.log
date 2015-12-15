@@ -1,101 +1,23 @@
 registered:keychain:127.0.0.1:8083:motionsensor:127.0.0.1:8082:door:127.0.0.1:8084
-Message received from door = 1449888455;Open;0;0;1
-Request_To_Prepare:0;door;127.0.0.1;8084;1449888455;Open;0;0;1
+Alive
+Alive
+Alive
+Message received from door = 1450174083;Open;0;0;1
+: Sending Request to prepareRequest_To_Prepare:0;door;127.0.0.1;8084;1450174083;Open;0;0;1
 
+: Received a new message to commit
 Commit
+: Received Commit from Coordinator
 Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888456;True;1;0;1
+1;keychain;127.0.0.1;8083;1450174084;True;1;0;1
 
+: Received a new message to commit
 Commit
+: Received Commit from Coordinator
 Request_To_Prepare:
-2;motionsensor;127.0.0.1;8082;1449888457;True;1;1;1
+2;motionsensor;127.0.0.1;8082;1450174085;True;1;1;1
 
+: Received a new message to commit
 Commit
-Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888461;True;2;1;1
-
-Commit
-Request_To_Prepare:
-2;motionsensor;127.0.0.1;8082;1449888462;True;2;2;1
-
-Commit
-Message received from door = 1449888465;Close;2;2;2
-Request_To_Prepare:0;door;127.0.0.1;8084;1449888465;Close;2;2;2
-
-Commit
-Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888466;False;3;2;2
-
-Commit
-Request_To_Prepare:
-2;motionsensor;127.0.0.1;8082;1449888467;False;3;3;2
-
-Commit
-Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888471;False;4;3;2
-
-Commit
-Request_To_Prepare:
-2;motionsensor;127.0.0.1;8082;1449888472;False;4;4;2
-
-Commit
-Message received from door = 1449888475;Open;4;4;3
-Request_To_Prepare:0;door;127.0.0.1;8084;1449888475;Open;4;4;3
-
-Commit
-Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888476;True;5;4;3
-
-Commit
-Request_To_Prepare:
-2;motionsensor;127.0.0.1;8082;1449888477;True;5;5;3
-
-Commit
-Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888481;True;6;5;3
-
-Commit
-Request_To_Prepare:
-2;motionsensor;127.0.0.1;8082;1449888482;True;6;6;3
-
-Commit
-Message received from door = 1449888485;Close;6;6;4
-Request_To_Prepare:0;door;127.0.0.1;8084;1449888485;Close;6;6;4
-
-Commit
-Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888486;True;7;6;4
-
-Commit
-Request_To_Prepare:
-2;motionsensor;127.0.0.1;8082;1449888487;True;7;7;4
-
-Commit
-Message received from door = 1449888490;Open;7;7;5
-Request_To_Prepare:0;door;127.0.0.1;8084;1449888490;Open;7;7;5
-
-Commit
-Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888491;True;8;7;5
-
-Commit
-Message received from door = 1449888492;Close;8;7;6
-Request_To_Prepare:0;door;127.0.0.1;8084;1449888492;Close;8;7;6
-
-Commit
-Request_To_Prepare:
-2;motionsensor;127.0.0.1;8082;1449888492;True;8;8;6
-
-Commit
-Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888496;False;9;8;6
-
-Commit
-Request_To_Prepare:
-2;motionsensor;127.0.0.1;8082;1449888497;False;9;9;6
-
-Commit
-Request_To_Prepare:
-1;keychain;127.0.0.1;8083;1449888501;False;10;9;6
-
-Commit
+: Received Commit from Coordinator
+Alive
