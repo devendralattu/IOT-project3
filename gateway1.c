@@ -10,7 +10,7 @@
 
 void * connection_handler(void *);
 void * threadReadFun(void *);
-void * sendingGatewayThread();
+void * sendingGatewayThread(void *);
 void * readRegistrationInfo();
 void * threadGatewayReceive();
 
@@ -267,7 +267,7 @@ void * connection_handler(void * cs1)
 	sleep(1);
 	id++;
 	int itemId = id;
-    pthread_t thread1;
+	pthread_t thread1, sendAliveThread;
 	clientStruct1 cs = *(clientStruct1*)(cs1);
 	csArr[itemId].sock = cs.sock;	
 
@@ -289,6 +289,15 @@ void * connection_handler(void * cs1)
 	regInfo = (char *)readmsg;
 	
 	puts(regInfo);
+	
+	//** New sensor connects after its other Gateway fails ** //
+	if(strstr(regInfo, ";") != NULL)
+	{
+		pthread_create(&thread1, NULL, &threadReadFun, (void *)&csArr[itemId]);
+		return ;
+	}
+	//****//
+	
 	//Get Client Registration Information
 
 	strcpy(csArr[itemId].name, strtok(regInfo, ":"));
@@ -402,7 +411,8 @@ void * connection_handler(void * cs1)
 			puts("Inside setReg2");
 			
 			write(csArr[itemId].sock, registrationInfo, strlen(registrationInfo));	
-
+			
+			pthread_create(&sendAliveThread, NULL, &sendingGatewayThread, (void *)&csArr[itemId].sock);
 			pthread_create(&thread1, NULL, &threadReadFun, (void *)&csArr[itemId]);
 			
 			//create receiving thread for gateway's messages only once.
@@ -525,25 +535,23 @@ void* threadReadFun(void *cs1)
 	}
 }
 
-void* sendingGatewayThread()
+void * sendingGatewayThread(void * cSockFDArg)
 {
-	int msglen;
-	char readmsg[2000];
-	printf("\n primary gSockFd = %d\n", gSockFd);
-	printf("inside while of sendingGatewayThread\n");
+	int cSockFD = *(int *)(cSockFDArg);
+	int tempVariable = 0;
+	printf("\ncSockFD = %d\n", cSockFD);
 	while(1)
 	{
 		puts(heartBeat);
-		write(gSockFd, heartBeat, strlen(heartBeat), 0);
+		write(cSockFD, heartBeat, strlen(heartBeat), 0);
 
-		memset(readmsg, 0, sizeof readmsg);
-		while(msglen = recv(gSockFd, readmsg, 2000, 0) <= 0)
-		{
-			continue;
-		}
-		printf("\nMessage received = %s\n", readmsg);
-		writeToFile(readmsg);
 		sleep(5);
+		/* Temp code to switch to other Gateway after sending 2 messages to its Gateway.
+		if(++tempVariable == 2)
+		{
+			break;
+		}
+		*/
 	}	
 }
 

@@ -12,6 +12,8 @@ void * connection_handler_2(void *);
 void * doorServerThread(void * args);
 void * doorConnectMotionThread(void * args);
 void * doorConnectKeychainThread(void * args);
+void * connectPrimaryGateway();
+void * checkAliveGateway();
 
 typedef struct
 {
@@ -33,6 +35,11 @@ char *file1, *file2, *file3;
 char *keyIP, *motionIP;
 char *doorName, *doorIP;
 int keyPort, motionPort, doorPort;
+int sockfd;
+int sleepCount = 0, sleepLimit = 999;
+
+struct sockaddr_in server, server_alternate;
+pthread_t doSerThread, doConnThread, conPGateway, chkAliveThread;
 
 void writeToFile(char * fileData)
 {
@@ -53,10 +60,7 @@ int main(int argc, char* argv[])
 	file3 = "output/DoorOutput.log";
 	/*****/
 	
-	int sockfd;
-	struct sockaddr_in server;
 	char readmsg[2000], msglen;
-	pthread_t doSerThread, doConnThread;	
 		
 	//To read the Config File 
 	FILE *fp1 = fopen(file1,"r");	
@@ -156,7 +160,7 @@ int main(int argc, char* argv[])
 			}
 		}	
 	}
-	
+			
 	sleep(1);	
 	//Create server and connect with other sensors
 	pthread_create(&doSerThread, NULL, &doorServerThread, NULL);	
@@ -167,6 +171,7 @@ int main(int argc, char* argv[])
 	pthread_create(&doConnThread, NULL, &doorConnectKeychainThread, NULL);	
 	
 	sleep(2);
+	pthread_create(&conPGateway, NULL, &connectPrimaryGateway, NULL);
 	//To read state file and send values to Gateway
 	FILE *fp2 = fopen(file2,"r");
 	char *state = (char *)malloc(sizeof(char)*100);
@@ -414,3 +419,59 @@ void * doorConnectKeychainThread(void * args)
 	}	
 }
 
+void * connectPrimaryGateway()
+{
+	int msglen;
+	char readmsg[2000];
+	
+	pthread_create(&chkAliveThread, NULL, &checkAliveGateway, NULL);
+
+	gotoLoop:
+	while(msglen = recv(sockfd, readmsg, 2000, 0) <= 0)
+	{
+		continue;
+	}
+	printf("\nMessage received >>> %s\n", readmsg);
+	
+	if(strstr(readmsg, "Alive") != NULL)
+	{
+		sleepLimit = 6;
+		sleepCount = 0;
+		memset(readmsg, 0, sizeof readmsg);
+	}
+	goto gotoLoop;
+	
+}
+
+void * checkAliveGateway()
+{
+	while(sleepCount < sleepLimit)
+	{
+		sleepCount++;
+		sleep(1);
+	}
+	//consider gateway is dead and close socket and connect to Primary Gateway.
+	
+	//Initialise the server socket
+	shutdown(sockfd, SHUT_RDWR);
+	close(sockfd);
+	
+	//create the socket
+	if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	{
+		printf("\nCould not create Sensor socket");
+	}
+	
+	server_alternate.sin_family = AF_INET;
+	server_alternate.sin_addr.s_addr = inet_addr("127.0.0.1");
+	server_alternate.sin_port = htons( 8080 );
+
+	//Connect to gateway
+	if(connect(sockfd, (struct sockaddr *) &server_alternate, sizeof(server_alternate)) < 0)
+	{
+		perror("\n<<<<<<<<<<< Unable to connect to PRIMARY Gateway >>>>>>> ");
+		return ;
+	}
+
+	puts("<<<<<<<<<<< Sensor: Connected to PRIMARY Gateway >>>>>>> ");
+}
